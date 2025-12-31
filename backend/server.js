@@ -8,19 +8,20 @@ app.use(express.json());
 app.use("/images", express.static("products"));
 
 const db = msql.createConnection({
- host: process.env.DB_HOST || "localhost",
-  user: process.env.DB_USER || "root",
-  password: process.env.DB_PASSWORD || "",
-  database: process.env.DB_NAME || "claude",
+ host: process.env.DB_HOST ,
+  user: process.env.DB_USER ,
+  password: process.env.DB_PASSWORD ,
+  database: process.env.DB_NAME ,
+port: process.env.DB_PORT || 3306,
+
 });
 
 db.connect((err) => {
   if (err) {
     console.error("mysql connection error", err);
-    process.exit(1);
-  }
+  }else{
   console.log("mysql connected");
-});
+}});
 
 // app.post("/login", (req, res) => {
 //   const { username, password } = req.body;
@@ -112,8 +113,7 @@ app.put("/update/:id", (req, res) => {
   );
 });
 
-const PORT = process.env.PORT||5000;
-
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+const port = process.env.PORT || 5000;
+app.listen(port, () => {
+  console.log(`Server is running on port ${port}`);
 });
