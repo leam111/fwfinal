@@ -1,72 +1,48 @@
 const express = require("express");
 const cors = require("cors");
-const msql = require("mysql2");
+const { Pool } = require("pg"); // 1. Use pg instead of mysql2
 const app = express();
 
 app.use(cors());
 app.use(express.json());
 app.use("/images", express.static("products"));
 
-const db = msql.createConnection({
- host: process.env.DB_HOST ,
-  user: process.env.DB_USER ,
-  password: process.env.DB_PASSWORD ,
-  database: process.env.DB_NAME ,
-port: process.env.DB_PORT || 3306,
-
+// 2. Setup PostgreSQL connection pool
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL, // Render provides this automatically
+  ssl: {
+    rejectUnauthorized: false, // Required for Render connection
+  },
 });
 
-db.connect((err) => {
+// Test connection
+pool.connect((err) => {
   if (err) {
-    console.error("mysql connection error", err);
-  }else{
-  console.log("mysql connected");
-}});
-
-// app.post("/login", (req, res) => {
-//   const { username, password } = req.body;
-
-//   if (!username || !password) {
-//     return res.status(400).json({ message: "username and password required" });
-//   }
-//   const query = "SELECT * FROM users WHERE username = ? ";
-
-//   db.query(query, [username, password], (err, results) => {
-//     if (err) {
-//       console.error(err);
-//       return res.status(500).json({ message: "server error", error: err });
-//     }
-
-//     //check if the user exists
-//     if (results.length === 0) {
-//       return res.status(401).json({ message: "Invalid username or password" });
-//     }
-//     const user = results[0];
-//     const passwordMatch = bcrypt.compareSync(password, user.password);
-
-//     if (!passwordMatch) {
-//       return res.status(401).json({ message: "Invalid username or password" });
-//     }
-//     res.json({ message: "login successful" });
-//   });
-// });
+    console.error("PostgreSQL connection error", err);
+  } else {
+    console.log("PostgreSQL connected successfully");
+  }
+});
 
 app.get("/products", (req, res) => {
   const query = "SELECT * FROM products";
-  db.query(query, (err, results) => {
+  pool.query(query, (err, results) => {
     if (err) {
       console.error(err);
-      return res.status(500).json({ message: "err0r fetching ", error: err });
+      return res.status(500).json({ message: "error fetching", error: err });
     }
-    res.json(results);
+    // In Postgres, data is inside results.rows
+    res.json(results.rows);
   });
 });
 
 app.post("/insert", (req, res) => {
   const { name, description, price, category, image } = req.body;
+  // 3. Changed ? to $1, $2, etc.
   const query =
-    "INSERT INTO products (name , description, price , category, image) values (?,?,?,?,?)";
-  db.query(
+    "INSERT INTO products (name, description, price, category, image) VALUES ($1, $2, $3, $4, $5) RETURNING *";
+  
+  pool.query(
     query,
     [name, description, price, category, image],
     (err, results) => {
@@ -74,9 +50,9 @@ app.post("/insert", (req, res) => {
         console.error(err);
         return res
           .status(500)
-          .json({ message: "err0r inserting ", error: err });
+          .json({ message: "error inserting", error: err });
       }
-      res.json(results);
+      res.json(results.rows[0]);
     }
   );
 });
@@ -84,23 +60,27 @@ app.post("/insert", (req, res) => {
 app.delete("/delete/:id", (req, res) => {
   const { id } = req.params;
 
-  const query = "DELETE FROM products WHERE id = ? ";
+  // Changed ? to $1
+  const query = "DELETE FROM products WHERE id = $1";
 
-  db.query(query, [id], (err, results) => {
+  pool.query(query, [id], (err, results) => {
     if (err) {
       console.error(err);
       return res.status(500).json({ message: "error deleting", error: err });
     }
-    res.json({ message: "product deleted successfully! , ", id: id });
+    res.json({ message: "product deleted successfully!", id: id });
   });
 });
 
 app.put("/update/:id", (req, res) => {
   const { id } = req.params;
   const { name, description, price, category, image } = req.body;
+  
+  // Changed ? to $1, $2, $3...
   const query =
-    "UPDATE products SET name = ? , description = ? ,price = ? , category = ? , image = ? WHERE id = ?  ";
-  db.query(
+    "UPDATE products SET name = $1, description = $2, price = $3, category = $4, image = $5 WHERE id = $6";
+    
+  pool.query(
     query,
     [name, description, price, category, image, id],
     (err, results) => {
@@ -113,7 +93,8 @@ app.put("/update/:id", (req, res) => {
   );
 });
 
-const port = process.env.PORT || 5000;
-app.listen(port, () => {
-  console.log(`Server is running on port ${port}`);
+// 4. Use process.env.PORT for Render
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
 });
